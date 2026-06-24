@@ -101,6 +101,7 @@ def maybe_flash(track_id, speed):
     last_flash = now
     for tid in [t for t, ts in recent.items() if now - ts > DEDUP_WINDOW]:
         recent.pop(tid, None)                        # oude track_ids opruimen
+    print(f"FLITS: track {track_id}, {speed:.1f} km/u (> {SPEED_LIMIT})", flush=True)
     try:
         flash_q.put_nowait(True)
     except queue.Full:
@@ -116,10 +117,12 @@ def on_message(client, userdata, msg):
 
 
 def on_connect(client, userdata, flags, rc, properties=None):
+    print(f"MQTT verbonden (rc={rc}), subscribe '{MQTT_TOPIC}'", flush=True)
     client.subscribe(MQTT_TOPIC)
 
 
 def on_disconnect(client, userdata, *args):
+    print("MQTT disconnect -> fail-safe naar 0", flush=True)
     set_safe()                                       # link weg -> geen blijvende flits
 
 
@@ -146,6 +149,8 @@ def main():
     client.on_connect = on_connect
     client.on_message = on_message
     client.on_disconnect = on_disconnect
+    print(f"strobe_service: broker {MQTT_HOST}:{MQTT_PORT}, drempel {SPEED_LIMIT} km/u, "
+          f"Art-Net {ARTNET_IP} u{UNIVERSE}", flush=True)
     client.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_forever()
 
