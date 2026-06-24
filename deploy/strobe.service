@@ -1,0 +1,20 @@
+[Unit]
+Description=Snelheids-flits service (Art-Net -> BOTEX SP-1500)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/highway-strobe
+# uv-native: vaste interpreter uit de .venv die 'uv sync' aanmaakt (voorspelbaar
+# voor systemd; install.sh past dit pad/gebruiker zo nodig aan).
+ExecStart=/home/pi/highway-strobe/.venv/bin/python /home/pi/highway-strobe/strobe_service.py
+Restart=always
+RestartSec=3
+# Fail-safe: tijd om DMX netjes op 0 te zetten bij stop
+KillSignal=SIGTERM
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

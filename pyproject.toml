@@ -1,0 +1,14 @@
+[project]
+name = "highway-strobe"
+version = "0.1.0"
+description = "Snelweg-detectie -> Art-Net DMX strobe (Ieper installatie)"
+requires-python = ">=3.11"
+dependencies = [
+    "stupidArtnet>=1.6",
+    "paho-mqtt>=2.0",
+    "python-dotenv>=1.2.2",
+]
+
+[tool.uv]
+# Op de Pi: gebruik de systeem-Python i.p.v. een eigen build te downloaden:
+#   uv sync --python /usr/bin/python3

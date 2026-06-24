@@ -1,0 +1,45 @@
+# mosquitto MQTT-broker voor de strobe-keten.
+# Gedeployed als Komodo-stack "flash-mqtt" op server rtx4090-win10.
+# Bereikbaar op het Tailscale-IP van die machine: 100.71.177.9:1883
+#
+# Auth: allow_anonymous false + password_file. De config en passwd worden bij
+# elke start gegenereerd uit MQTT_USER/MQTT_PASS (Komodo .env), zodat er geen
+# losse config-bestanden nodig zijn.
+#
+# .env (Komodo stack environment):
+#   MQTT_USER=flash
+#   MQTT_PASS=<wachtwoord>
+#
+# Let op: poort staat op alle interfaces. Docker Desktop/WSL2 op Windows kan niet
+# op een specifiek host-IP (de Tailscale-interface) binden. Publiek internet komt
+# er niet bij (geen port-forward); LAN + Tailscale-peers wel. Auth dekt de rest.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: flash-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /mosquitto/config/mosquitto.conf <<'EOF'
+        listener 1883
+        allow_anonymous false
+        password_file /mosquitto/config/passwd
+        persistence true
+        persistence_location /mosquitto/data/
+        EOF
+        mosquitto_passwd -b -c /mosquitto/config/passwd "$MQTT_USER" "$MQTT_PASS"
+        chown mosquitto:mosquitto /mosquitto/config/passwd
+        chmod 600 /mosquitto/config/passwd
+        exec mosquitto -c /mosquitto/config/mosquitto.conf
+    environment:
+      MQTT_USER: ${MQTT_USER}
+      MQTT_PASS: ${MQTT_PASS}
+    volumes:
+      - mosquitto-data:/mosquitto/data
+
+volumes:
+  mosquitto-data:
