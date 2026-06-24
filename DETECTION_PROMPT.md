@@ -1,6 +1,8 @@
 # Prompt: MQTT-publisher in de detectiesoftware
 
-Geef onderstaande prompt aan Claude Code in de **Krocky-detectierepo** (niet deze repo).
+De detectie + livefeed zijn een **apart project**: `/Users/koraysels/work/flash`
+(repo `koraysels/flash`, draait op Krocky). Dit strobe-repo raakt dat NIET aan.
+Geef onderstaande prompt aan Claude Code dáár.
 
 ---
 

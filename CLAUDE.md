@@ -89,8 +89,9 @@ DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte rep
   `--scan` is enkel nog voor herverificatie, `--hold` checkt kanaal/bekabeling.
   Live tunen van speed/dimmer/flits gaat met `live_control.py`.
 - De **veiligheidsinvarianten hierboven blijven staan** bij elke wijziging.
-- **Raak de detectie-/tracking-/snelheidslogica niet aan** — die leeft in de aparte
-  Krocky-repo; daar voeg je enkel de MQTT-publisher toe (zie DETECTION_PROMPT.md).
+- **Raak de detectie-/tracking-/snelheidslogica niet aan** — die leeft in het aparte
+  project `/Users/koraysels/work/flash` (repo `koraysels/flash`, op Krocky). Daar voeg je
+  enkel de MQTT-publisher toe (zie DETECTION_PROMPT.md). Dit strobe-repo wijzigt dat nooit.
 - OS = Raspberry Pi OS **Bookworm** 64-bit desktop (NIET Trixie: V3D-GPU-hang op Pi 4 +
   wisselvallige Pi Connect-schermdeling medio 2026).
 
