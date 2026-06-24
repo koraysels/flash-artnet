@@ -46,22 +46,42 @@ MQTT_PORT   = int(os.environ.get("MQTT_PORT", 1883))
 MQTT_USER   = os.environ.get("MQTT_USER", "flash")          # broker auth; secrets via .env
 MQTT_PASS   = os.environ.get("MQTT_PASS", "")               # NOOIT hardcoden - zet in .env
 MQTT_TOPIC  = "krocky/speed"    # Krocky publiceert hier per voertuig
-SPEED_LIMIT = 120               # km/u - drempel HIER (niet op Krocky)
 
-DEDUP_WINDOW = 10.0   # s: zelfde track_id niet opnieuw flitsen binnen dit venster
-COOLDOWN     = 1.0    # s: globale min. tijd tussen flitsen (>= FLASH_DURATION).
+# Snelheidsdrempel PER FEED/camera (km/u) - elke camera heeft een eigen limiet.
+# Override via env SPEED_LIMITS (JSON), bv: SPEED_LIMITS={"A":120,"B":90,"C":70}
+SPEED_LIMITS = json.loads(os.environ.get("SPEED_LIMITS", '{"A":120,"B":120,"C":120}'))
+SPEED_LIMIT_DEFAULT = float(os.environ.get("SPEED_LIMIT_DEFAULT", 120))  # onbekende feed
+
+# Flits-offset: vertraag de flits zodat hij samenvalt met het GEBUFFERDE HLS-beeld
+# op de schermen. We mikken op event-ts + FLASH_DELAY (event-ts = opnametijd op Krocky).
+# Zet dit ~ gelijk aan de HLS-latency (paar sec). Klokken via NTP/Tailscale gelijk houden.
+FLASH_DELAY = float(os.environ.get("FLASH_DELAY", 6.0))   # s offset
+
+DEDUP_WINDOW = 10.0   # s: zelfde (feed, track_id) niet opnieuw flitsen binnen dit venster
+COOLDOWN     = 1.0    # s: globale min. tijd tussen ECHTE flitsen (>= FLASH_DURATION).
                       #    Houdt < 3 flitsen/s -> WCAG/fotosensitiviteit-grens.
 
 # Verwachte MQTT-payload (JSON), per getrackt voertuig dat Krocky publiceert:
-#   {"feed": "A", "track_id": 1234, "speed_kmh": 137.4, "ts": 1719230000.0}
+#   {
+#     "feed": "A",                 # camera/stream-id
+#     "location": "E17 km42",      # plaats (logging/context)
+#     "direction": "noord",        # rijrichting (logging/context)
+#     "track_id": 1234,            # stabiele ByteTrack-id (dedup)
+#     "speed_kmh": 137.4,          # gedetecteerde snelheid
+#     "max_speed_kmh": 120,        # toegelaten max op deze feed (drempel); fallback = config
+#     "ts": 1719230000.0,          # opnametijd (unix epoch) op Krocky
+#     "hls_latency_s": 6.0         # actuele HLS-buffer van deze feed; fallback = FLASH_DELAY
+#   }
+# Flits-moment = ts + hls_latency_s, zodat de flits samenvalt met het beeld op de schermen.
 # -----------------------------------------------------------------------
 
 artnet = StupidArtnet(ARTNET_IP, UNIVERSE, 512, ARTNET_FPS,
                       even_packet_size=True, broadcast=False)
 flash_q = queue.Queue(maxsize=1)
-recent = {}            # track_id -> tijd van laatste flits
-last_flash = 0.0       # globale laatste flits (cooldown)
+recent = {}            # (feed, track_id) -> tijd van laatste flits (dedup)
+last_flash = 0.0       # globale laatste ECHTE flits (cooldown)
 state_lock = threading.Lock()
+fire_lock = threading.Lock()   # beschermt last_flash (Timer-callbacks zijn threads)
 running = True
 
 
@@ -88,20 +108,53 @@ def flash_worker():
             artnet.set_single_value(SPEED_CH, 0)            # rate uit (geen naloop)
 
 
-def maybe_flash(track_id, speed):
-    global last_flash
+def maybe_flash(d):
+    """Drempel + dedup bij ontvangst; plan de flits uitgelijnd op het beeld.
+
+    max_speed_kmh en hls_latency_s komen uit de payload (per feed),
+    met de Pi-config als fallback.
+    """
     now = time.time()
-    if speed <= SPEED_LIMIT:
+    feed = d.get("feed")
+    track_id = d.get("track_id")
+    speed = float(d["speed_kmh"])
+    # max-snelheid: payload wint, anders per-feed config, anders default
+    limit = float(d.get("max_speed_kmh", SPEED_LIMITS.get(feed, SPEED_LIMIT_DEFAULT)))
+    if speed <= limit:                               # onder de drempel: niks
         return
-    if now - last_flash < COOLDOWN:                  # fotosensitiviteit + leesbaarheid
+    key = (feed, track_id)
+    if track_id is not None and now - recent.get(key, 0) < DEDUP_WINDOW:
+        return                                       # zelfde auto op deze feed, niet opnieuw
+    recent[key] = now
+    for k in [k for k, t in recent.items() if now - t > DEDUP_WINDOW]:
+        recent.pop(k, None)                          # oude entries opruimen
+    # Flits uitlijnen op het GEBUFFERDE HLS-beeld: opnametijd (ts) + actuele HLS-latency.
+    # hls_latency_s komt uit de payload (per feed); FLASH_DELAY is de fallback.
+    ts = d.get("ts")
+    offset = float(d.get("hls_latency_s", FLASH_DELAY))
+    fire_at = (ts + offset) if ts else (now + offset)
+    delay = max(0.0, fire_at - now)
+    loc, direction = d.get("location", "?"), d.get("direction", "?")
+    print(f"GEPLAND: feed {feed} ({loc} {direction}) track {track_id} "
+          f"{speed:.1f} > {limit:.0f} km/u; flits over {delay:.1f}s (hls {offset:.1f}s)",
+          flush=True)
+    t = threading.Timer(delay, fire_flash, args=(feed, track_id, speed))
+    t.daemon = True                                  # blokkeert shutdown niet
+    t.start()
+
+
+def fire_flash(feed, track_id, speed):
+    """Vuurt de flits op het geplande moment; cooldown (fotosensitiviteit) hier afgedwongen."""
+    global last_flash
+    if not running:
         return
-    if track_id is not None and now - recent.get(track_id, 0) < DEDUP_WINDOW:
-        return                                       # zelfde auto, niet opnieuw
-    recent[track_id] = now
-    last_flash = now
-    for tid in [t for t, ts in recent.items() if now - ts > DEDUP_WINDOW]:
-        recent.pop(tid, None)                        # oude track_ids opruimen
-    print(f"FLITS: track {track_id}, {speed:.1f} km/u (> {SPEED_LIMIT})", flush=True)
+    with fire_lock:
+        now = time.time()
+        if now - last_flash < COOLDOWN:              # nooit < cooldown tussen flitsen
+            print(f"SKIP (cooldown): feed {feed} track {track_id}", flush=True)
+            return
+        last_flash = now
+    print(f"FLITS: feed {feed} track {track_id} {speed:.1f} km/u", flush=True)
     try:
         flash_q.put_nowait(True)
     except queue.Full:
@@ -110,10 +163,9 @@ def maybe_flash(track_id, speed):
 
 def on_message(client, userdata, msg):
     try:
-        d = json.loads(msg.payload)
-        maybe_flash(d.get("track_id"), float(d["speed_kmh"]))
+        maybe_flash(json.loads(msg.payload))
     except (ValueError, KeyError, TypeError):
-        pass
+        pass                                         # ongeldige/onvolledige payload negeren
 
 
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -149,7 +201,8 @@ def main():
     client.on_connect = on_connect
     client.on_message = on_message
     client.on_disconnect = on_disconnect
-    print(f"strobe_service: broker {MQTT_HOST}:{MQTT_PORT}, drempel {SPEED_LIMIT} km/u, "
+    print(f"strobe_service: broker {MQTT_HOST}:{MQTT_PORT}, drempels {SPEED_LIMITS} "
+          f"(default {SPEED_LIMIT_DEFAULT}), flits-delay fallback {FLASH_DELAY}s, "
           f"Art-Net {ARTNET_IP} u{UNIVERSE}", flush=True)
     client.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_forever()

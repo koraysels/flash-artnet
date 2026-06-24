@@ -66,9 +66,10 @@ uv run mqtt_pulse.py --speed 200 --duration 0.3
 Topic = `flash/pulse`. `mqtt_strobe.py` houdt cooldown (WCAG) + fail-safe naar 0 aan.
 
 ## 3. Productie-service (Pi 5)
-`strobe_service.py` luistert op `krocky/speed`, past `SPEED_LIMIT` toe, ontdubbelt per
-`track_id` en flitst. Config staat boven in het bestand of via env
-(`MQTT_HOST/PORT/USER/PASS`, defaults = de Komodo-broker).
+`strobe_service.py` luistert op `krocky/speed`. Per voertuig: drempel = `max_speed_kmh`
+uit de payload (per feed, fallback `SPEED_LIMITS`/`SPEED_LIMIT_DEFAULT`), ontdubbelen op
+`(feed, track_id)`, en de flits wordt gepland op `ts + hls_latency_s` zodat hij samenvalt
+met het gebufferde HLS-beeld. Config via env (zie `.env.example`); secrets via `.env`.
 
 ```bash
 uv run strobe_service.py        # handmatig draaien om te testen
@@ -76,12 +77,15 @@ uv run strobe_service.py        # handmatig draaien om te testen
 
 Een fake speeder publiceren om de drempel-keten te testen (creds uit `.env`):
 ```bash
-uv run python -c "import os, json, paho.mqtt.publish as p; \
+uv run python -c "import os, json, time, paho.mqtt.publish as p; \
   from dotenv import load_dotenv; load_dotenv(); \
-  p.single('krocky/speed', json.dumps({'feed':'A','track_id':1,'speed_kmh':150.0,'ts':0}), \
+  p.single('krocky/speed', json.dumps({'feed':'A','location':'test','direction':'noord', \
+  'track_id':99,'speed_kmh':150.0,'max_speed_kmh':120,'ts':time.time(),'hls_latency_s':2.0}), \
   hostname=os.environ['MQTT_HOST'], \
   auth={'username':os.environ['MQTT_USER'],'password':os.environ['MQTT_PASS']})"
 ```
+150 > `max_speed_kmh` 120 → de service plant de flits op `ts + hls_latency_s` (hier ~2s later).
+In de log zie je eerst `GEPLAND: ...` en daarna `FLITS: ...`.
 
 ## MQTT-broker (mosquitto)
 Draait als Komodo-stack **`flash-mqtt`** op rtx4090-win10. Compose ligt in

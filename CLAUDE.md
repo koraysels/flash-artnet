@@ -15,9 +15,12 @@ Drie schermen tonen elk een live, geannoteerde videofeed.
   - 1× Pi 5: feed C (software-decode) + strobe-service in de achtergrond.
 - **Strobe-keten** — Pi 5 → Art-Net (UDP) → Pknight CR021R @ 192.168.0.111 → DMX → BOTEX SP-1500.
 
-## Latency
-Geen eis. Video = gewone HLS via go2rtc/MediaMTX (paar sec buffer = robuuster over 5G).
-De flits is volledig ontkoppeld van het beeld: vuurt op detectie-events, geen sync nodig.
+## Latency / flits-timing
+Video = gewone HLS via go2rtc/MediaMTX (paar sec buffer = robuuster over 5G).
+De flits wordt **zacht uitgelijnd** op het beeld: niet vrij vurend, maar gepland op
+`ts + hls_latency_s` (opnametijd + actuele HLS-buffer, beide uit de payload). Zo valt de
+flits ongeveer samen met het moment dat de overtreder op de schermen verschijnt. Geen
+harde frame-sync — een offset die de buffer compenseert. Klokken via NTP/Tailscale gelijk.
 
 ## Twee datastromen vanaf Krocky (nooit vermengen)
 1. **Videopad** (pixels, voor mensen): 3× HLS-stream → 3 kiosk-schermen. De kiosk/
@@ -38,11 +41,22 @@ De strobe triggert op event-data, niet op pixels.
 
 ## MQTT-payload (Krocky publiceert, Pi 5 consumeert)
 Topic `krocky/speed`, per getrackt voertuig met stabiele snelheid:
-```json
-{"feed": "A", "track_id": 1234, "speed_kmh": 137.4, "ts": 1719230000.0}
+```jsonc
+{
+  "feed": "A",                 // camera/stream-id
+  "location": "E17 km42",      // plaats (context/logging)
+  "direction": "noord",        // rijrichting (context/logging)
+  "track_id": 1234,            // stabiele ByteTrack-id (dedup)
+  "speed_kmh": 137.4,          // gedetecteerde snelheid
+  "max_speed_kmh": 120,        // toegelaten max op DEZE feed (drempel) - verschilt per camera
+  "ts": 1719230000.0,          // opnametijd (unix epoch)
+  "hls_latency_s": 6.0         // actuele HLS-buffer van deze feed (flits-offset)
+}
 ```
-- `track_id` is essentieel: de strobe ontdubbelt erop (1 flits per voertuig).
-- Snelheidsdrempel staat op de **Pi 5** (SPEED_LIMIT), niet op Krocky.
+- `track_id` is essentieel: de strobe ontdubbelt op `(feed, track_id)` (1 flits per voertuig).
+- **Drempel per feed**: `max_speed_kmh` komt uit de payload (per camera, niet altijd 120).
+  Fallback op de Pi: `SPEED_LIMITS` (per-feed config) → `SPEED_LIMIT_DEFAULT`.
+- **Flits-timing**: gepland op `ts + hls_latency_s` (zie Latency-sectie). Fallback `FLASH_DELAY`.
 - Test-trigger los van de detectie: topic `flash/pulse` → `mqtt_strobe.py` vuurt direct
   (zie `mqtt_pulse.py`). Payload optioneel: `{"speed": 230, "duration": 0.5}`.
 
@@ -60,11 +74,13 @@ Topic `krocky/speed`, per getrackt voertuig met stabiele snelheid:
   Fysiek herverifiëren kan met `uv run flash_test.py --scan`.
 
 ## Veiligheid (NIET weglaten / niet versoepelen)
-- **Dedup per track_id** + **globale cooldown** (default 1s) → houdt < 3 flitsen/s,
-  de WCAG/fotosensitiviteits-grens. Publiek toegankelijk: waarschuwing aan de ingang.
-- **Fail-safe naar 0** bij stop, MQTT-disconnect en linkverlies. Software dekt geen
-  harde kill/stroomuitval — configureer indien mogelijk de CR021R om DMX op 0 te
-  zetten bij Art-Net-verlies (hardware-vangnet).
+- **Dedup per (feed, track_id)** + **globale cooldown** (default 1s, afgedwongen op
+  vuur-moment) → houdt < 3 flitsen/s, de WCAG/fotosensitiviteits-grens. Publiek
+  toegankelijk: waarschuwing aan de ingang.
+- **Fail-safe naar 0** bij stop, MQTT-disconnect en linkverlies (software).
+- **Hardware-vangnet bij harde kill**: de CR021R kan dit NIET (geen signal-loss-optie in
+  het menu — geverifieerd in de manual). Zie `deploy/strobe-failsafe.md` voor de analyse
+  + empirische test (gedrag CR021R/SP-1500 bij Art-Net-verlies) en mitigaties.
 
 ## Repo-layout
 ```
@@ -79,6 +95,7 @@ deploy/
   strobe.service     systemd-unit (alleen Pi 5), wijst naar .venv-interpreter
   install.sh         strobe-service uitrollen op de Pi 5 (OS/Tailscale al geconfigureerd)
   flash-mqtt.compose.yaml  mosquitto-broker (Komodo-stack flash-mqtt, rtx4090-win10)
+  strobe-failsafe.md  analyse + test DMX→0 bij uitval (CR021R heeft geen signal-loss-optie)
 DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte repo)
 ```
 
@@ -102,6 +119,10 @@ DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte rep
 - [x] End-to-end MQTT → Art-Net → strobe getest (mqtt_pulse.py → mqtt_strobe.py)
 - [x] strobe_service.py draait als systemd-service op de Pi 5 (FLASH-PI-02),
       end-to-end geverifieerd via journald (connect + FLITS op fake speed-event)
-- [ ] go2rtc/MediaMTX-config op Krocky (3 feeds, HLS op Tailscale-adres)
+- [x] Payload uitgebreid: per-feed `max_speed_kmh` (drempel) + `ts`/`hls_latency_s`
+      (flits gepland op ts + latency), + location/direction. Consumer aangepast.
+- [ ] go2rtc/MediaMTX-config op Krocky (3 feeds, HLS op Tailscale-adres) + meet de
+      werkelijke `hls_latency_s` per feed (gaat in de payload)
 - [ ] MQTT-publisher in de detectiesoftware (`/Users/koraysels/work/flash`, zie DETECTION_PROMPT.md)
-- [ ] CR021R signal-loss → 0 instellen (hardware-vangnet)
+- [ ] Hardware-failsafe testen (DMX→0 bij harde kill) — zie `deploy/strobe-failsafe.md`
+      (CR021R heeft geen signal-loss-instelling; empirische test + evt. mitigatie)
