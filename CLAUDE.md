@@ -100,7 +100,8 @@ DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte rep
 - [x] DMX-keten fysiek gevalideerd (universe 0, OUT01). Flits-model: speed 230 + dimmer-gate 0.5s
 - [x] MQTT-broker (mosquitto) live op Komodo (rtx4090-win10, 100.71.177.9, auth) + getest
 - [x] End-to-end MQTT → Art-Net → strobe getest (mqtt_pulse.py → mqtt_strobe.py)
+- [x] strobe_service.py draait als systemd-service op de Pi 5 (FLASH-PI-02),
+      end-to-end geverifieerd via journald (connect + FLITS op fake speed-event)
 - [ ] go2rtc/MediaMTX-config op Krocky (3 feeds, HLS op Tailscale-adres)
-- [ ] MQTT-publisher in de detectiesoftware (Krocky-repo, zie DETECTION_PROMPT.md)
-- [ ] strobe_service.py end-to-end op de echte Pi 5 draaien (systemd)
+- [ ] MQTT-publisher in de detectiesoftware (`/Users/koraysels/work/flash`, zie DETECTION_PROMPT.md)
 - [ ] CR021R signal-loss → 0 instellen (hardware-vangnet)
