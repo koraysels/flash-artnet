@@ -37,6 +37,10 @@ if [ -z "$CHROME" ]; then
   exit 1
 fi
 
+# Stille, geldige locale (anders: "Fontconfig warning: ignoring UTF-8")
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+export LANG="${LANG:-C.UTF-8}"
+
 # Scherm aan (Wayland/labwc); negeer stil als wlr-randr ontbreekt
 wlr-randr --output HDMI-A-1 --on 2>/dev/null || true
 
@@ -52,7 +56,12 @@ while true; do
     --disable-session-crashed-bubble --hide-scrollbars \
     --autoplay-policy=no-user-gesture-required \
     --password-store=basic \
-    --check-for-update-interval=31536000
+    --check-for-update-interval=31536000 \
+    --disable-background-networking --disable-sync \
+    --disable-component-update --disable-breakpad \
+    --disable-features=Translate,MediaRouter \
+    --log-level=3 \
+    2>/dev/null
   echo ">> Chromium gestopt, herstart over 2s..."
   sleep 2
 done
