@@ -89,6 +89,7 @@ flash_test.py        standalone DMX-tester (geen MQTT) - eerst de keten validere
 live_control.py      curses TUI: realtime speed/dimmer/flits tunen (eigen terminal)
 mqtt_strobe.py       MQTT-listener (topic flash/pulse) -> Art-Net-flits. Test/los van detectie
 mqtt_pulse.py        MQTT-sender: publiceert flits-puls(en) op flash/pulse (test-trigger)
+mqtt_speed_test.py   MQTT-sender: fake SpeedEvent op krocky/speed -> test de PRODUCTIE-service
 strobe_service.py    productie-service Pi 5: MQTT krocky/speed → drempel → dedup → flits → fail-safe
 pyproject.toml       deps (stupidArtnet, paho-mqtt)
 uv.lock              vastgepinde versies - meecommitten
