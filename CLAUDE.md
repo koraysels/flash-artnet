@@ -55,8 +55,8 @@ Topic `krocky/speed`, per getrackt voertuig met stabiele snelheid:
 ```
 NB: camelCase keys (publisher in work/flash), behalve `hls_latency_s`. `maxSpeedKmh` mag null.
 - `trackId` is essentieel: de strobe ontdubbelt op `(feed, trackId)` (1 flits per voertuig).
-- **Drempel per feed**: `maxSpeedKmh` komt uit de payload (per camera, niet altijd 120; mag
-  null). Fallback op de Pi: `SPEED_LIMITS` (per-feed config) → `SPEED_LIMIT_DEFAULT`.
+- **Drempel**: `maxSpeedKmh` komt uit de payload (per voertuig). Is die null/afwezig, dan
+  valt de Pi terug op één algemene `SPEED_LIMIT_DEFAULT` (120 km/u, env-override).
 - **Flits-timing**: gepland op `ts + hls_latency_s` (zie Latency-sectie). Fallback `FLASH_DELAY`.
 - Test-trigger los van de detectie: topic `flash/pulse` → `mqtt_strobe.py` vuurt direct
   (zie `mqtt_pulse.py`). Payload optioneel: `{"speed": 230, "duration": 0.5}`.

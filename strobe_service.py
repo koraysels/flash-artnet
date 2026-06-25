@@ -47,10 +47,9 @@ MQTT_USER   = os.environ.get("MQTT_USER", "flash")          # broker auth; secre
 MQTT_PASS   = os.environ.get("MQTT_PASS", "")               # NOOIT hardcoden - zet in .env
 MQTT_TOPIC  = "krocky/speed"    # Krocky publiceert hier per voertuig
 
-# Snelheidsdrempel PER FEED/camera (km/u) - elke camera heeft een eigen limiet.
-# Override via env SPEED_LIMITS (JSON), bv: SPEED_LIMITS={"A":120,"B":90,"C":70}
-SPEED_LIMITS = json.loads(os.environ.get("SPEED_LIMITS", '{"A":120,"B":120,"C":120}'))
-SPEED_LIMIT_DEFAULT = float(os.environ.get("SPEED_LIMIT_DEFAULT", 120))  # onbekende feed
+# Snelheidsdrempel - FALLBACK als de payload geen maxSpeedKmh meebrengt.
+# De drempel hoort per voertuig in de payload te zitten (maxSpeedKmh); dit is enkel vangnet.
+SPEED_LIMIT_DEFAULT = float(os.environ.get("SPEED_LIMIT_DEFAULT", 120))  # km/u
 
 # Flits-offset: vertraag de flits zodat hij samenvalt met het GEBUFFERDE HLS-beeld
 # op de schermen. We mikken op event-ts + FLASH_DELAY (event-ts = opnametijd op Krocky).
@@ -121,8 +120,7 @@ def maybe_flash(d):
     speed = float(d["speedKmh"])
     # max-snelheid: payload wint (mag null zijn -> dan fallback per-feed config / default)
     raw_limit = d.get("maxSpeedKmh")
-    limit = float(raw_limit) if raw_limit is not None \
-        else float(SPEED_LIMITS.get(feed, SPEED_LIMIT_DEFAULT))
+    limit = float(raw_limit) if raw_limit is not None else SPEED_LIMIT_DEFAULT
     if speed <= limit:                               # onder de drempel: niks
         return
     key = (feed, track_id)
@@ -205,8 +203,8 @@ def main():
     client.on_connect = on_connect
     client.on_message = on_message
     client.on_disconnect = on_disconnect
-    print(f"strobe_service: broker {MQTT_HOST}:{MQTT_PORT}, drempels {SPEED_LIMITS} "
-          f"(default {SPEED_LIMIT_DEFAULT}), flits-delay fallback {FLASH_DELAY}s, "
+    print(f"strobe_service: broker {MQTT_HOST}:{MQTT_PORT}, drempel-fallback "
+          f"{SPEED_LIMIT_DEFAULT} km/u, flits-delay fallback {FLASH_DELAY}s, "
           f"Art-Net {ARTNET_IP} u{UNIVERSE}", flush=True)
     client.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
     client.loop_forever()

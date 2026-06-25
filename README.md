@@ -66,10 +66,10 @@ uv run mqtt_pulse.py --speed 200 --duration 0.3
 Topic = `flash/pulse`. `mqtt_strobe.py` houdt cooldown (WCAG) + fail-safe naar 0 aan.
 
 ## 3. Productie-service (Pi 5)
-`strobe_service.py` luistert op `krocky/speed`. Per voertuig: drempel = `max_speed_kmh`
-uit de payload (per feed, fallback `SPEED_LIMITS`/`SPEED_LIMIT_DEFAULT`), ontdubbelen op
-`(feed, track_id)`, en de flits wordt gepland op `ts + hls_latency_s` zodat hij samenvalt
-met het gebufferde HLS-beeld. Config via env (zie `.env.example`); secrets via `.env`.
+`strobe_service.py` luistert op `krocky/speed`. Per voertuig: drempel = `maxSpeedKmh`
+uit de payload (fallback `SPEED_LIMIT_DEFAULT`, 120 km/u), ontdubbelen op `(feed, trackId)`,
+en de flits wordt gepland op `ts + hls_latency_s` zodat hij samenvalt met het gebufferde
+HLS-beeld. Config via env (zie `.env.example`); secrets via `.env`.
 
 ```bash
 uv run strobe_service.py        # handmatig draaien om te testen
