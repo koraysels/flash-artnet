@@ -92,7 +92,11 @@ Draait als Komodo-stack **`flash-mqtt`** op rtx4090-win10. Compose ligt in
 `deploy/flash-mqtt.compose.yaml`. Auth verplicht (user `flash`); wachtwoord in de Komodo
 `.env`. Bereikbaar op `100.71.177.9:1883`.
 
-## Uitrollen op de Pi 5 (strobe)
+## Uitrollen op de Pi's
+Volledige stap-voor-stap uitrol van nul (ssh-key → clone → service/kiosk + autostart):
+zie **`deploy/PI-SETUP.md`**. Kort:
+
+### Pi 5 (strobe)
 Aanname: OS (Bookworm) en Tailscale zijn al klaar. Dit repo doet de Art-Net/MQTT-strobe
 op de Pi 5.
 

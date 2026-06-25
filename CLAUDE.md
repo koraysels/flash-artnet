@@ -97,6 +97,7 @@ deploy/
   strobe.service     systemd-unit (alleen Pi 5), wijst naar .venv-interpreter
   install.sh         strobe-service uitrollen op de Pi 5 (OS/Tailscale al geconfigureerd)
   kiosk.sh           Chromium-kiosk launcher: open een feed-URL fullscreen (per Pi, met arg)
+  PI-SETUP.md        volledige Pi-uitrol van nul (ssh-key, clone, service + kiosk autostart)
   flash-mqtt.compose.yaml  mosquitto-broker (Komodo-stack flash-mqtt, rtx4090-win10)
   strobe-failsafe.md  analyse + test DMX→0 bij uitval (CR021R heeft geen signal-loss-optie)
 DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte repo)
