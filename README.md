@@ -93,8 +93,7 @@ Draait als Komodo-stack **`flash-mqtt`** op rtx4090-win10. Compose ligt in
 `.env`. Bereikbaar op `100.71.177.9:1883`.
 
 ## Uitrollen op de Pi 5 (strobe)
-Aanname: OS (Bookworm) en Tailscale zijn al klaar. De videofeeds draaien via de eigen
-kiosk/videostream-launcher (ander project) — dit repo doet enkel de Art-Net/MQTT-strobe
+Aanname: OS (Bookworm) en Tailscale zijn al klaar. Dit repo doet de Art-Net/MQTT-strobe
 op de Pi 5.
 
 ```bash
@@ -102,6 +101,24 @@ bash deploy/install.sh          # uv sync + strobe.service installeren/starten
 ```
 
 Daarna: `systemctl status strobe.service` / `journalctl -u strobe.service -f`.
+
+## Kiosk-Pi's (schermen)
+Dezelfde repo (op de kiosk-Pi's gecloned als `~/FLASH/flash-kiosk`). `deploy/kiosk.sh`
+opent de feed fullscreen in Chromium. De URL wordt **afgeleid uit de hostname**, dus
+exact dezelfde regel werkt op elke Pi: `FLASH-PI-02` → `.../display/flash-pi-2`.
+
+```bash
+./deploy/kiosk.sh                          # leidt URL af uit hostname
+./deploy/kiosk.sh "http://host/pad"        # of een expliciete URL
+```
+Feeds (display-server op `100.71.177.9:8080`):
+`flash-pi-1`, `flash-pi-2`, `flash-pi-3` → `http://100.71.177.9:8080/display/flash-pi-N`.
+
+Autostart bij boot (labwc), één regel op elke Pi:
+```bash
+mkdir -p ~/.config/labwc
+echo '~/FLASH/flash-kiosk/deploy/kiosk.sh &' >> ~/.config/labwc/autostart
+```
 
 ## Detectiesoftware (aparte repo, op Krocky)
 De MQTT-publisher voeg je daar toe — zie `DETECTION_PROMPT.md` voor de prompt.

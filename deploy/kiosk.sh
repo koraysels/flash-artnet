@@ -1,21 +1,33 @@
 #!/usr/bin/env bash
-# kiosk.sh - open een URL fullscreen in Chromium (kiosk) op een Pi.
-# Per Pi de juiste feed-URL meegeven. Auto-herstart als Chromium sneuvelt.
+# kiosk.sh - open de feed-URL fullscreen in Chromium (kiosk) op een Pi.
+# Auto-herstart als Chromium sneuvelt.
+#
+# De URL wordt standaard AFGELEID UIT DE HOSTNAME, zodat exact dezelfde regel op
+# alle Pi's werkt: FLASH-PI-02 -> .../display/flash-pi-2.
 #
 # Draaien:
-#   ./deploy/kiosk.sh "http://<host>:1984/stream.html?src=feedA"
+#   ./deploy/kiosk.sh                       # leidt URL af uit hostname
+#   ./deploy/kiosk.sh "http://host/pad"     # expliciete URL wint
 #   KIOSK_URL="http://..." ./deploy/kiosk.sh
+#   KIOSK_BASE="http://host:8080/display/flash-pi-" ./deploy/kiosk.sh   # andere base
 #
-# Autostart bij login (labwc, Bookworm desktop):
+# Autostart bij login (labwc, Bookworm desktop) - één regel op elke Pi:
 #   mkdir -p ~/.config/labwc
-#   echo '~/FLASH/flash-artnet/deploy/kiosk.sh "http://<host>:1984/stream.html?src=feedA" &' \
-#     >> ~/.config/labwc/autostart
+#   echo '~/FLASH/flash-kiosk/deploy/kiosk.sh &' >> ~/.config/labwc/autostart
 set -e
+
+# Base-URL van de display-server (display-server draait op de rtx4090-bak, Tailscale).
+KIOSK_BASE="${KIOSK_BASE:-http://100.71.177.9:8080/display/flash-pi-}"
 
 URL="${1:-${KIOSK_URL:-}}"
 if [ -z "$URL" ]; then
-  echo "Gebruik: $0 <url>   (of zet KIOSK_URL)" >&2
-  exit 1
+  # Leid het feed-nummer af uit de hostname (laatste cijfers, leading zeros weg).
+  N="$(hostname | grep -oE '[0-9]+' | tail -1 | sed 's/^0*//')"
+  if [ -z "$N" ]; then
+    echo "Geen feed-nummer in hostname '$(hostname)'. Geef een URL mee: $0 <url>" >&2
+    exit 1
+  fi
+  URL="${KIOSK_BASE}${N}"
 fi
 
 # Chromium heet chromium of chromium-browser, afhankelijk van de Pi OS-versie
