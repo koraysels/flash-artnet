@@ -79,12 +79,12 @@ Een fake speeder publiceren om de drempel-keten te testen (creds uit `.env`):
 ```bash
 uv run python -c "import os, json, time, paho.mqtt.publish as p; \
   from dotenv import load_dotenv; load_dotenv(); \
-  p.single('krocky/speed', json.dumps({'feed':'A','location':'test','direction':'noord', \
-  'track_id':99,'speed_kmh':150.0,'max_speed_kmh':120,'ts':time.time(),'hls_latency_s':2.0}), \
+  p.single('krocky/speed', json.dumps({'feed':'A','location':'test','direction':'AB', \
+  'trackId':99,'speedKmh':150.0,'maxSpeedKmh':120,'ts':time.time(),'hls_latency_s':2.0}), \
   hostname=os.environ['MQTT_HOST'], \
   auth={'username':os.environ['MQTT_USER'],'password':os.environ['MQTT_PASS']})"
 ```
-150 > `max_speed_kmh` 120 → de service plant de flits op `ts + hls_latency_s` (hier ~2s later).
+150 > `maxSpeedKmh` 120 → de service plant de flits op `ts + hls_latency_s` (hier ~2s later).
 In de log zie je eerst `GEPLAND: ...` en daarna `FLITS: ...`.
 
 ## MQTT-broker (mosquitto)

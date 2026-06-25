@@ -45,17 +45,18 @@ Topic `krocky/speed`, per getrackt voertuig met stabiele snelheid:
 {
   "feed": "A",                 // camera/stream-id
   "location": "E17 km42",      // plaats (context/logging)
-  "direction": "noord",        // rijrichting (context/logging)
-  "track_id": 1234,            // stabiele ByteTrack-id (dedup)
-  "speed_kmh": 137.4,          // gedetecteerde snelheid
-  "max_speed_kmh": 120,        // toegelaten max op DEZE feed (drempel) - verschilt per camera
+  "direction": "AB",           // rijrichting: "AB" | "BA" | null (context/logging)
+  "trackId": 1234,             // stabiele ByteTrack-id (dedup)
+  "speedKmh": 137.4,           // gedetecteerde snelheid
+  "maxSpeedKmh": 120,          // max op DEZE feed (drempel); null -> Pi-fallback. Per camera.
   "ts": 1719230000.0,          // opnametijd (unix epoch)
   "hls_latency_s": 6.0         // actuele HLS-buffer van deze feed (flits-offset)
 }
 ```
-- `track_id` is essentieel: de strobe ontdubbelt op `(feed, track_id)` (1 flits per voertuig).
-- **Drempel per feed**: `max_speed_kmh` komt uit de payload (per camera, niet altijd 120).
-  Fallback op de Pi: `SPEED_LIMITS` (per-feed config) → `SPEED_LIMIT_DEFAULT`.
+NB: camelCase keys (publisher in work/flash), behalve `hls_latency_s`. `maxSpeedKmh` mag null.
+- `trackId` is essentieel: de strobe ontdubbelt op `(feed, trackId)` (1 flits per voertuig).
+- **Drempel per feed**: `maxSpeedKmh` komt uit de payload (per camera, niet altijd 120; mag
+  null). Fallback op de Pi: `SPEED_LIMITS` (per-feed config) → `SPEED_LIMIT_DEFAULT`.
 - **Flits-timing**: gepland op `ts + hls_latency_s` (zie Latency-sectie). Fallback `FLASH_DELAY`.
 - Test-trigger los van de detectie: topic `flash/pulse` → `mqtt_strobe.py` vuurt direct
   (zie `mqtt_pulse.py`). Payload optioneel: `{"speed": 230, "duration": 0.5}`.

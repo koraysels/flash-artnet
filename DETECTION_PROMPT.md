@@ -14,28 +14,28 @@ Eisen:
 - Publiceer één MQTT-bericht per voertuig zodra de tracker een stabiele/betrouwbare
   snelheid heeft (gebruik de bestaande ByteTrack track_id). Eén keer per track wanneer
   de schatting confident is (bv. na N consistente frames), niet elk frame.
-- Payload (JSON) - alle velden:
-  ```jsonc
-  {
-    "feed": "A",                 // camera/stream-id (= deze instantie, env FEED_ID)
-    "location": "E17 km42",      // plaats van de camera (context/logging)
-    "direction": "noord",        // rijrichting (context/logging)
-    "track_id": 1234,            // stabiele ByteTrack-id (downstream dedup)
-    "speed_kmh": 137.4,          // gedetecteerde snelheid
-    "max_speed_kmh": 120,        // toegelaten max op DEZE feed/locatie (de drempel)
-    "ts": 1719230000.0,          // OPNAMETIJD (unix epoch, seconden) van dit voertuig
-    "hls_latency_s": 6.0         // ACTUELE HLS-buffer/latency van deze feed, in seconden
+- Payload (JSON) - exact dit schema (camelCase, behalve hls_latency_s):
+  ```ts
+  type SpeedEvent = {
+    feed: string            // camera/stream-id (= deze instantie)
+    location: string        // plaats van de camera (context/logging)
+    direction: 'AB' | 'BA' | null  // rijrichting (context/logging)
+    trackId: number         // stabiele ByteTrack-id (downstream dedup)
+    speedKmh: number        // gedetecteerde snelheid
+    maxSpeedKmh: number | null     // max op DEZE feed/locatie (de drempel); null = downstream-fallback
+    ts: number              // OPNAMETIJD (unix epoch, seconden) van dit voertuig
+    hls_latency_s: number   // ACTUELE HLS-buffer/latency van deze feed, in seconden
   }
   ```
   Belangrijk:
   - `ts` = het moment van detectie/opname (niet publicatietijd). Downstream plant de flits
     op `ts + hls_latency_s` zodat de flits samenvalt met het gebufferde beeld op de schermen.
     Klokken gelijk houden via NTP/Tailscale.
-  - `max_speed_kmh` = de snelheidslimiet per camera/locatie. Verschilt per feed (niet altijd
-    120). Mag uit config/env komen (`MAX_SPEED_KMH` per instantie).
+  - `maxSpeedKmh` = de snelheidslimiet per camera/locatie. Verschilt per feed (niet altijd
+    120). `null` mag: downstream valt dan terug op zijn eigen config.
   - `hls_latency_s` = de huidige end-to-end latency van go2rtc/MediaMTX voor deze feed. Zo
     exact mogelijk (meet of configureer per feed); de flits-timing hangt hiervan af.
-  - `feed`, `location`, `direction` zijn per instantie configureerbaar (env).
+  - `feed`, `location`, `direction` zijn per instantie configureerbaar.
 - Topic: configureerbaar, default "krocky/speed".
 - Broker: mosquitto op `100.71.177.9:1883` (Tailscale-IP, Komodo-stack flash-mqtt).
   Auth verplicht. Via env vars met deze defaults: MQTT_HOST=100.71.177.9, MQTT_PORT=1883,

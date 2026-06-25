@@ -61,16 +61,17 @@ DEDUP_WINDOW = 10.0   # s: zelfde (feed, track_id) niet opnieuw flitsen binnen d
 COOLDOWN     = 1.0    # s: globale min. tijd tussen ECHTE flitsen (>= FLASH_DURATION).
                       #    Houdt < 3 flitsen/s -> WCAG/fotosensitiviteit-grens.
 
-# Verwachte MQTT-payload (JSON), per getrackt voertuig dat Krocky publiceert:
+# Verwachte MQTT-payload (JSON) - exact zoals de publisher (work/flash) hem stuurt.
+# LET OP: camelCase keys, behalve hls_latency_s. maxSpeedKmh mag null zijn.
 #   {
 #     "feed": "A",                 # camera/stream-id
 #     "location": "E17 km42",      # plaats (logging/context)
-#     "direction": "noord",        # rijrichting (logging/context)
-#     "track_id": 1234,            # stabiele ByteTrack-id (dedup)
-#     "speed_kmh": 137.4,          # gedetecteerde snelheid
-#     "max_speed_kmh": 120,        # toegelaten max op deze feed (drempel); fallback = config
+#     "direction": "AB",           # rijrichting: "AB" | "BA" | null (logging/context)
+#     "trackId": 1234,             # stabiele ByteTrack-id (dedup)
+#     "speedKmh": 137.4,           # gedetecteerde snelheid
+#     "maxSpeedKmh": 120,          # max op deze feed (drempel); null -> fallback config
 #     "ts": 1719230000.0,          # opnametijd (unix epoch) op Krocky
-#     "hls_latency_s": 6.0         # actuele HLS-buffer van deze feed; fallback = FLASH_DELAY
+#     "hls_latency_s": 6.0         # actuele HLS-buffer van deze feed; ontbreekt -> FLASH_DELAY
 #   }
 # Flits-moment = ts + hls_latency_s, zodat de flits samenvalt met het beeld op de schermen.
 # -----------------------------------------------------------------------
@@ -116,10 +117,12 @@ def maybe_flash(d):
     """
     now = time.time()
     feed = d.get("feed")
-    track_id = d.get("track_id")
-    speed = float(d["speed_kmh"])
-    # max-snelheid: payload wint, anders per-feed config, anders default
-    limit = float(d.get("max_speed_kmh", SPEED_LIMITS.get(feed, SPEED_LIMIT_DEFAULT)))
+    track_id = d.get("trackId")
+    speed = float(d["speedKmh"])
+    # max-snelheid: payload wint (mag null zijn -> dan fallback per-feed config / default)
+    raw_limit = d.get("maxSpeedKmh")
+    limit = float(raw_limit) if raw_limit is not None \
+        else float(SPEED_LIMITS.get(feed, SPEED_LIMIT_DEFAULT))
     if speed <= limit:                               # onder de drempel: niks
         return
     key = (feed, track_id)
@@ -129,9 +132,10 @@ def maybe_flash(d):
     for k in [k for k, t in recent.items() if now - t > DEDUP_WINDOW]:
         recent.pop(k, None)                          # oude entries opruimen
     # Flits uitlijnen op het GEBUFFERDE HLS-beeld: opnametijd (ts) + actuele HLS-latency.
-    # hls_latency_s komt uit de payload (per feed); FLASH_DELAY is de fallback.
+    # hls_latency_s komt uit de payload (per feed, mag ontbreken); FLASH_DELAY = fallback.
     ts = d.get("ts")
-    offset = float(d.get("hls_latency_s", FLASH_DELAY))
+    raw_off = d.get("hls_latency_s")
+    offset = float(raw_off) if raw_off is not None else FLASH_DELAY
     fire_at = (ts + offset) if ts else (now + offset)
     delay = max(0.0, fire_at - now)
     loc, direction = d.get("location", "?"), d.get("direction", "?")
