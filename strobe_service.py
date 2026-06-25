@@ -166,8 +166,9 @@ def fire_flash(feed, track_id, speed):
 def on_message(client, userdata, msg):
     try:
         maybe_flash(json.loads(msg.payload))
-    except (ValueError, KeyError, TypeError):
-        pass                                         # ongeldige/onvolledige payload negeren
+    except (ValueError, KeyError, TypeError) as e:
+        print(f"payload genegeerd ({type(e).__name__}: {e}): {msg.payload[:120]!r}",
+              flush=True)
 
 
 def on_connect(client, userdata, flags, rc, properties=None):
