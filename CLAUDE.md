@@ -108,6 +108,10 @@ DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte rep
   `--scan` is enkel nog voor herverificatie, `--hold` checkt kanaal/bekabeling.
   Live tunen van speed/dimmer/flits gaat met `live_control.py`.
 - De **veiligheidsinvarianten hierboven blijven staan** bij elke wijziging.
+- **Slechts ÉÉN proces mag Art-Net naar de node sturen.** Draait `strobe_service.py`
+  (systemd) + tegelijk `mqtt_strobe.py`/`flash_test.py`/`live_control.py`, dan vechten
+  hun frames (continue 0 vs flits-255) → lamp blijft donker. Stop de service vóór je een
+  los testtool draait: `sudo systemctl stop strobe.service`.
 - **Raak de detectie-/tracking-/snelheidslogica niet aan** — die leeft in het aparte
   project `/Users/koraysels/work/flash` (repo `koraysels/flash`, op Krocky). Daar voeg je
   enkel de MQTT-publisher toe (zie DETECTION_PROMPT.md). Dit strobe-repo wijzigt dat nooit.
@@ -125,6 +129,7 @@ DETECTION_PROMPT.md  prompt voor de MQTT-publisher in de Krocky-repo (aparte rep
       (flits gepland op ts + latency), + location/direction. Consumer aangepast.
 - [ ] go2rtc/MediaMTX-config op Krocky (3 feeds, HLS op Tailscale-adres) + meet de
       werkelijke `hls_latency_s` per feed (gaat in de payload)
-- [ ] MQTT-publisher in de detectiesoftware (`/Users/koraysels/work/flash`, zie DETECTION_PROMPT.md)
+- [x] MQTT-publisher in `/Users/koraysels/work/flash` draait + echte events stromen binnen
+- [x] Volledige keten LIVE end-to-end fysiek bevestigd (echte publisher → flits op de lamp)
 - [ ] Hardware-failsafe testen (DMX→0 bij harde kill) — zie `deploy/strobe-failsafe.md`
       (CR021R heeft geen signal-loss-instelling; empirische test + evt. mitigatie)
