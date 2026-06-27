@@ -93,7 +93,8 @@ while true; do
     --check-for-update-interval=31536000 \
     --disable-background-networking --disable-sync \
     --disable-component-update --disable-breakpad \
-    --disable-features=Translate,MediaRouter \
+    --disable-features=Translate,TranslateUI,MediaRouter \
+    --disable-translate --lang=en-US \
     --log-level=3 \
     2>/dev/null
   echo ">> Chromium gestopt, herstart over 2s..."
