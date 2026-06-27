@@ -63,6 +63,16 @@ fi
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 export LANG="${LANG:-C.UTF-8}"
 
+# Boot-race fix: bij autostart kan dit script vuren VOOR de Wayland-compositor
+# (labwc) klaar is. Dan faalt wlr-randr en kan chromium niet connecten ->
+# flapping start / zwart scherm bij boot. Wacht tot de Wayland-socket bestaat.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+for _i in $(seq 1 30); do
+  [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
+  sleep 1
+done
+
 # Scherm aan (Wayland/labwc): zet ELK aangesloten scherm aan, dynamisch.
 # Sommige Pi's hangen op HDMI, andere op het DSI/ribbon-paneel. We lezen de
 # kernel-DRM-status en mappen de connector-naam (card1-HDMI-A-1) op de
