@@ -84,8 +84,11 @@ sudo apt install -y chromium-browser     # indien nog niet aanwezig
 ```
 
 `deploy/kiosk.sh` leidt de feed-URL af uit de **hostname**
-(`FLASH-PI-02` → `http://100.71.177.9:8080/display/flash-pi-2`), dus exact dezelfde
-regel werkt op elke Pi. Eerst handmatig testen:
+(`FLASH-PI-02` → `http://100.71.177.9:8080/display/FLASH-PI-02`), dus exact dezelfde
+regel werkt op elke Pi. De display-app matcht op de hostname; geef 'm dus
+ongewijzigd door (niet het kale nummer `flash-pi-2` → lege route → "zwart").
+Het script zet ook elk **aangesloten** scherm aan (HDMI óf DSI/ribbon, dynamisch)
+en wacht bij boot op de Wayland-socket (anti-flapping). Eerst handmatig testen:
 ```bash
 ./deploy/kiosk.sh                        # of: ./deploy/kiosk.sh "http://host/pad"
 ```
@@ -104,6 +107,46 @@ Na een update:
 ```bash
 cd ~/FLASH/flash-kiosk && git pull        # daarna reboot of herstart de kiosk
 ```
+
+---
+
+## Troubleshooting (uit de praktijk)
+
+**Zwart/leeg scherm terwijl de kiosk lijkt te draaien.** Twee onafhankelijke
+oorzaken, los uit te sluiten:
+- **Verkeerde feed-URL** → display-app rendert een lege route. Check wat chromium
+  echt laadt: `tr '\0' '\n' < /proc/$(pgrep -f -- --app | head -1)/cmdline | grep -- --app=`.
+  Moet `.../display/$(hostname)` zijn (volle hostname, hoofdletters).
+- **Je kijkt via VNC/Pi Connect en de capture is grijs/zwart** terwijl de Pi prima
+  draait. De compositor leeft (bewijs: `grim` direct, zie hieronder), maar de
+  wayvnc-GPU-capture hing. Fix:
+  ```bash
+  systemctl --user restart rpi-connect-wayvnc.service rpi-connect.service
+  ```
+
+**Sanity-check of de desktop/feed écht rendert (los van VNC):** maak een screenshot
+direct uit de compositor-buffer:
+```bash
+XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 grim /tmp/shot.png
+```
+Haal op met `scp`. Toont de echte schermbuffer, ook als VNC grijs is.
+
+> ⚠️ **NOOIT `grim` draaien tegelijk met chromium-GPU-opstart op een Pi 4.**
+> De V3D-GPU hangt dan: twee GPU-capture-consumenten tegelijk → processen in
+> D-state → load schiet naar 50+ → de Pi is minutenlang onbereikbaar (tot de
+> OOM-killer chromium reapt). Test de kiosk dus zonder gelijktijdige `grim`/VNC-grab,
+> of grim pas nadat chromium volledig idle is.
+
+**Hoge load vlak na boot is normaal** (chromium-GPU-init); zakt binnen ~1 min.
+Een echte hang klimt richting 50+ en blijft. Onderscheid via `uptime` (1/5/15-min avg).
+
+**Reboot via ssh:** sudo is passwordless → gewoon `sudo reboot`. Vermijd het
+wachtwoord in de commandline (de `!` in het wachtwoord triggert zsh-history-expansion
+lokaal en mangle't het commando).
+
+**Autostart-regel staat er maar één keer in?** `cat ~/.config/labwc/autostart`.
+Tijdelijk uitzetten zonder te wissen: regel prefixen met `# DISABLED ` (en weer aan
+met `sed -i 's/^# DISABLED //' ~/.config/labwc/autostart`).
 
 ---
 
