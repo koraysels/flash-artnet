@@ -22,7 +22,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Base-URL van de display-server (display-server draait op de rtx4090-bak, Tailscale).
-KIOSK_BASE="${KIOSK_BASE:-http://100.71.177.9:8080/display/}"
+KIOSK_BASE="${KIOSK_BASE:-https://flash.cursorpointer.be/display/}"
 
 URL="${1:-${KIOSK_URL:-}}"
 if [ -z "$URL" ]; then
