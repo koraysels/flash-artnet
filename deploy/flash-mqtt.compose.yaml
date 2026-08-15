@@ -11,8 +11,13 @@
 #   MQTT_PASS=<wachtwoord>
 #
 # Let op: poort staat op alle interfaces. Docker Desktop/WSL2 op Windows kan niet
-# op een specifiek host-IP (de Tailscale-interface) binden. Publiek internet komt
-# er niet bij (geen port-forward); LAN + Tailscale-peers wel. Auth dekt de rest.
+# op een specifiek host-IP (de Tailscale-interface) binden. 1883 zelf heeft geen
+# port-forward: LAN + Tailscale-peers komen erbij, publiek internet niet.
+#
+# 9001 (websockets) is WEL publiek zodra de Cloudflare-tunnel de hostname
+# mqtt.cursorpointer.be -> http://localhost:9001 routeert. Vanaf dat moment is het
+# wachtwoord de enige bescherming: gebruik een lang random MQTT_PASS en roteer het
+# als het ooit gelekt is.
 
 services:
   mosquitto:
@@ -21,11 +26,19 @@ services:
     restart: unless-stopped
     ports:
       - "1883:1883"
+      - "9001:9001"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         cat > /mosquitto/config/mosquitto.conf <<'EOF'
         listener 1883
+        allow_anonymous false
+        password_file /mosquitto/config/passwd
+        # Tweede pad: MQTT over websockets, achter de Cloudflare-tunnel
+        # (hostname -> http://localhost:9001). Nodig omdat het Tailscale-pad
+        # wegviel toen de box van de tailnet ging en de strobe 15 dagen stil lag.
+        listener 9001
+        protocol websockets
         allow_anonymous false
         password_file /mosquitto/config/passwd
         persistence true

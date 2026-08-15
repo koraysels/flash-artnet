@@ -36,8 +36,21 @@ De strobe triggert op event-data, niet op pixels.
 - Compose ligt in de repo: `deploy/flash-mqtt.compose.yaml` (reproduceerbaar via Komodo).
 - Port staat op alle interfaces (Docker Desktop/WSL2 kan niet op het Tailscale-IP binden);
   publiek internet komt er niet bij (geen port-forward), LAN + Tailscale-peers wel.
+- **Tweede listener `9001` (websockets)** sinds 2026-08-15, bedoeld achter de
+  Cloudflare-tunnel (`mqtt.cursorpointer.be` → `http://localhost:9001`). Zodra die route
+  bestaat is de broker publiek en is het wachtwoord de enige bescherming.
 - Clients (`strobe_service.py`, `mqtt_strobe.py`, `mqtt_pulse.py`) lezen
   `MQTT_HOST/PORT/USER/PASS` uit env, met deze broker als default.
+  `strobe_service.py` gebruikt daarnaast **`MQTT_ENDPOINTS`** (komma-gescheiden
+  `tcp://`/`wss://`-URL's) en roteert daarover tot er één verbindt.
+
+### Les van 2026-07-31 (strobe lag 15 dagen stil)
+De box viel van de tailnet; `100.71.177.9` hoort in de netmap sindsdien bij een ander,
+offline toestel. De backend merkte niets (die publisht via `host.docker.internal`) en
+het dashboard bleef groen — dat meet alleen de **publish**-kant, niet of er een
+consument is. De Pi kon niet meer verbinden, en de oude `strobe_service.py` bleef na
+één `on_disconnect` stil hangen zonder reconnect. Vandaar: meerdere paden
+(`MQTT_ENDPOINTS`) + een connect-lus die nooit het proces laat sterven.
 
 ## MQTT-payload (Krocky publiceert, Pi 5 consumeert)
 Topic `krocky/speed`, per getrackt voertuig met stabiele snelheid:

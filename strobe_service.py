@@ -23,6 +23,7 @@ import queue
 import signal
 import threading
 import atexit
+from urllib.parse import urlparse
 
 import paho.mqtt.client as mqtt
 from stupidArtnet import StupidArtnet
@@ -46,6 +47,15 @@ MQTT_PORT   = int(os.environ.get("MQTT_PORT", 1883))
 MQTT_USER   = os.environ.get("MQTT_USER", "flash")          # broker auth; secrets via .env
 MQTT_PASS   = os.environ.get("MQTT_PASS", "")               # NOOIT hardcoden - zet in .env
 MQTT_TOPIC  = "krocky/speed"    # Krocky publiceert hier per voertuig
+
+# Meerdere paden naar dezelfde broker, in volgorde geprobeerd. Op 2026-07-31 viel
+# de box van de tailnet en was er GEEN tweede pad: de service bleef 15 dagen stil.
+# Vorm: komma-gescheiden URL's, tcp:// (LAN/Tailscale) of ws://|wss:// (via de
+# Cloudflare-tunnel, dus onafhankelijk van Tailscale).
+#   MQTT_ENDPOINTS=tcp://100.71.177.9:1883,wss://mqtt.cursorpointer.be:443/mqtt
+# (paho hanteert zelf een connect-timeout van 5s per poging.)
+MQTT_ENDPOINTS = os.environ.get("MQTT_ENDPOINTS", "")
+RETRY_DELAY    = float(os.environ.get("MQTT_RETRY_DELAY", 5))       # s tussen rondes
 
 # Snelheidsdrempel - FALLBACK als de payload geen maxSpeedKmh meebrengt.
 # De drempel hoort per voertuig in de payload te zitten (maxSpeedKmh); dit is enkel vangnet.
@@ -190,6 +200,34 @@ def shutdown(*_):
     artnet.stop()
 
 
+def parse_endpoints():
+    """MQTT_ENDPOINTS -> [(scheme, host, port, path)]; valt terug op MQTT_HOST/PORT."""
+    raw = [e.strip() for e in MQTT_ENDPOINTS.split(",") if e.strip()]
+    if not raw:
+        raw = [f"tcp://{MQTT_HOST}:{MQTT_PORT}"]
+    out = []
+    for url in raw:
+        u = urlparse(url if "://" in url else f"tcp://{url}")
+        scheme = u.scheme or "tcp"
+        port = u.port or (443 if scheme == "wss" else 80 if scheme == "ws" else 1883)
+        out.append((scheme, u.hostname, port, u.path or "/mqtt"))
+    return out
+
+
+def make_client(scheme, path):
+    transport = "websockets" if scheme in ("ws", "wss") else "tcp"
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, transport=transport)
+    if transport == "websockets":
+        client.ws_set_options(path=path)
+    if scheme == "wss":
+        client.tls_set()
+    client.username_pw_set(MQTT_USER, MQTT_PASS)
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.on_disconnect = on_disconnect
+    return client
+
+
 def main():
     atexit.register(shutdown)
     signal.signal(signal.SIGTERM, lambda *a: (shutdown(), exit(0)))
@@ -199,16 +237,32 @@ def main():
     set_safe()
     threading.Thread(target=flash_worker, daemon=True).start()
 
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    client.username_pw_set(MQTT_USER, MQTT_PASS)
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.on_disconnect = on_disconnect
-    print(f"strobe_service: broker {MQTT_HOST}:{MQTT_PORT}, drempel-fallback "
-          f"{SPEED_LIMIT_DEFAULT} km/u, flits-delay fallback {FLASH_DELAY}s, "
-          f"Art-Net {ARTNET_IP} u{UNIVERSE}", flush=True)
-    client.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
-    client.loop_forever()
+    endpoints = parse_endpoints()
+    print(f"strobe_service: brokers {[f'{s}://{h}:{p}' for s, h, p, _ in endpoints]}, "
+          f"drempel-fallback {SPEED_LIMIT_DEFAULT} km/u, flits-delay fallback "
+          f"{FLASH_DELAY}s, Art-Net {ARTNET_IP} u{UNIVERSE}", flush=True)
+
+    # Roteer over de endpoints tot er één verbindt; een connect-fout mag het proces
+    # NOOIT laten stoppen (anders draait systemd een restart-loop en flitst er niets).
+    i = 0
+    while running:
+        scheme, host, port, path = endpoints[i % len(endpoints)]
+        i += 1
+        client = make_client(scheme, path)
+        try:
+            client.connect(host, port, keepalive=30)
+            client.loop_forever()                    # blokkeert tot disconnect
+        except Exception as e:                       # DNS, timeout, TLS, refused...
+            print(f"MQTT connect faalde op {scheme}://{host}:{port} "
+                  f"({type(e).__name__}: {e})", flush=True)
+        finally:
+            set_safe()                               # link weg -> nooit blijvend aan
+            try:
+                client.disconnect()
+            except Exception:
+                pass
+        if running and i % len(endpoints) == 0:
+            time.sleep(RETRY_DELAY)                  # alle paden geprobeerd: even wachten
 
 
 if __name__ == "__main__":
